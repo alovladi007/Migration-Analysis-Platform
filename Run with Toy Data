@@ -1,0 +1,14 @@
+# Generate sample data
+python etl/generate_toy_data.py
+
+# Build panel
+python etl/build_region_panel.py toy
+
+# Train models
+python scripts/mobility_cli.py train --region toy
+python scripts/mobility_cli.py train_quantiles --region toy
+
+# Start API
+uvicorn api.main:app --reload --port 8000
+
+# Open web/map/index.html in browser
