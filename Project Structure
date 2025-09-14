@@ -1,0 +1,26 @@
+mobility-intel/
+├── README.md
+├── Makefile
+├── .env.example
+├── requirements.txt
+├── requirements-geo.txt
+├── requirements-ml.txt
+├── data/
+│   └── toy/
+├── etl/
+│   ├── build_region_panel.py
+│   ├── generate_toy_data.py
+│   ├── providers/
+│   └── [region folders]
+├── api/
+│   ├── main.py
+│   ├── auth.py
+│   ├── scenarios.py
+│   └── models/
+├── scripts/
+│   ├── mobility_cli.py
+│   └── train_tgnn.py
+├── models/
+│   └── toy/
+└── web/
+    └── map/
