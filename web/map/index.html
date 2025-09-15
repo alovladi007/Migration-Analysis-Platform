@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>MAP - Migration Analysis Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://unpkg.com/deck.gl@8.9.36/dist.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            max-width: 400px;
+        }
+        
+        .controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .control-row label {
+            font-weight: 600;
+            font-size: 12px;
+            color: #666;
+            min-width: 60px;
+        }
+        
+        select, input, button {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        select {
+            flex: 1;
+        }
+        
+        input[type="number"] {
+            width: 60px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            max-width: 400px;
+        }
+        
+        .info-panel h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        #summary {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            font-size: 12px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        #card {
+            max-height: 300px;
+            overflow: auto;
+            font-size: 12px;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        
+        #status {
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        hr {
+            margin: 10px 0;
+            border: none;
+            border-top: 1px solid #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="controls">
+        <h3>MAP Forecast Controls</h3>
+        
+        <div class="control-row">
+            <label>Region:</label>
+            <select id="region">
+                <option value="toy">Toyland (Demo)</option>
+                <option value="horn_of_africa">Horn of Africa</option>
+                <option value="sahel">Sahel</option>
+                <option value="south_asia">South Asia</option>
+                <option value="central_america_caribbean">Central America & Caribbean</option>
+            </select>
+        </div>
+        
+        <div class="control-row">
+            <label>Scenario:</label>
+            <select id="scenario">
+                <option value="baseline">Baseline</option>
+                <option value="drought">Drought</option>
+                <option value="heatwave">Heatwave</option>
+                <option value="conflict_spike">Conflict Spike</option>
+            </select>
+        </div>
+        
+        <div class="control-row">
+            <label>Months:</label>
+            <input id="months" type="number" min="1" max="6" value="3" />
+        </div>
+        
+        <div class="control-row">
+            <label>API Key:</label>
+            <input id="apikey" type="text" placeholder="Optional" style="flex: 1;" />
+        </div>
+        
+        <div class="control-row">
+            <button id="run">Run Forecast</button>
+            <button id="dlCSV" style="background: #2196F3;">Download CSV</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+    
+    <div class="info-panel">
+        <h4>Uncertainty Analysis</h4>
+        <div id="summary">
+            Select a region and scenario, then click "Run Forecast" to see predictions.
+            Map colors show P50 (median); tooltips show P10-P90 uncertainty bands.
+        </div>
+        <hr/>
+        <button id="showCard" style="background: #607D8B;">View Model Card</button>
+        <div id="card" style="display:none;"></div>
+    </div>
+    
+    <div class="legend">
+        <div style="font-weight: 600; margin-bottom: 8px;">Predicted Outflow</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgb(30, 100, 100);"></div>
+            <span>Low (< P25)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgb(128, 100, 100);"></div>
+            <span>Medium (P25-P75)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgb(255, 100, 100);"></div>
+            <span>High (> P75)</span>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentDeck = null;
+        
+        async function callScenario(region, scenario, months, apiKey) {
+            const headers = {'content-type': 'application/json'};
+            if (apiKey) headers['X-API-Key'] = apiKey;
+            
+            try {
+                const endpoint = scenario === 'baseline' ? '/forecast_quantiles_region' : '/forecast_scenarios_region';
+                const body = {
+                    region,
+                    period_start: '2020-12',
+                    periods: months,
+                    scenario,
+                    months
+                };
+                
+                const r = await fetch(API_BASE + endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(body)
+                });
+                
+                if (!r.ok) {
+                    const error = await r.text();
+                    throw new Error(`API error: ${error}`);
+                }
+                
+                const j = await r.json();
+                
+                // Load admin polygons
+                const geoUrl = `${region}_admin1.geojson`;
+                let geopolys = null;
+                try {
+                    const gj = await fetch(geoUrl);
+                    if (gj.ok) geopolys = await gj.json();
+                } catch(e) {
+                    console.warn('No admin polygons found for region:', region);
+                }
+                
+                // Extract predictions
+                let predictions;
+                if (j.results && j.results.length > 0) {
+                    // Scenario response - use last horizon
+                    const last = j.results[j.results.length - 1];
+                    predictions = last.predictions;
+                } else {
+                    // Direct quantile response
+                    predictions = j.predictions;
+                }
+                
+                return {predictions, geopolys, metadata: j};
+            } catch (e) {
+                console.error('API call failed:', e);
+                return {error: e.message};
+            }
+        }
+        
+        function colorForValue(value, min = 0, max = 100) {
+            // Normalize to 0-1
+            const norm = Math.max(0, Math.min(1, (value - min) / (max - min + 1)));
+            // Map to color intensity
+            const intensity = Math.floor(30 + norm * 225);
+            return [intensity, 100, 100, 180];
+        }
+        
+        function render(data) {
+            if (!data.predictions) return;
+            
+            const predMap = Object.fromEntries(
+                data.predictions.map(d => [String(d.admin_id), d])
+            );
+            
+            // Calculate statistics for color scaling
+            const values = data.predictions.map(d => d.p50 || d.yhat || 0);
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            
+            let layers = [];
+            
+            if (data.geopolys) {
+                // Real admin polygons
+                const polyLayer = new deck.GeoJsonLayer({
+                    id: 'admins',
+                    data: data.geopolys,
+                    pickable: true,
+                    filled: true,
+                    stroked: true,
+                    getFillColor: f => {
+                        const props = f.properties || {};
+                        const id = String(props.admin_id || props.shapeID || props.GID_1 || '');
+                        const pred = predMap[id];
+                        if (!pred) return [50, 50, 50, 100];
+                        const value = pred.p50 || pred.yhat || 0;
+                        return colorForValue(value, min, max);
+                    },
+                    getLineColor: [80, 80, 80, 200],
+                    getLineWidth: 1,
+                    updateTriggers: {
+                        getFillColor: [predMap]
+                    }
+                });
+                layers.push(polyLayer);
+                
+                // Adjust view for real geography
+                const bounds = turf.bbox(data.geopolys);
+                const center = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
+                
+                if (currentDeck) {
+                    currentDeck.setProps({
+                        layers,
+                        initialViewState: {
+                            longitude: center[0],
+                            latitude: center[1],
+                            zoom: 5,
+                            pitch: 0,
+                            bearing: 0
+                        }
+                    });
+                } else {
+                    currentDeck = new deck.DeckGL({
+                        container: 'map',
+                        initialViewState: {
+                            longitude: center[0],
+                            latitude: center[1],
+                            zoom: 5,
+                            pitch: 0,
+                            bearing: 0
+                        },
+                        controller: true,
+                        layers,
+                        getTooltip: getTooltip
+                    });
+                }
+            } else {
+                // Fallback to synthetic polygons for toy data
+                const nodes = {
+                    'A': [-2, 0], 'B': [-1, 0], 'C': [0, 0], 
+                    'D': [1, 0], 'E': [2, 0]
+                };
+                
+                const syntheticPolys = Object.keys(nodes).map(id => ({
+                    id,
+                    polygon: [
+                        [nodes[id][0] - 0.4, -0.4],
+                        [nodes[id][0] + 0.4, -0.4],
+                        [nodes[id][0] + 0.4, 0.4],
+                        [nodes[id][0] - 0.4, 0.4],
+                        [nodes[id][0] - 0.4, -0.4]
+                    ]
+                }));
+                
+                const polyLayer = new deck.PolygonLayer({
+                    id: 'synthetic-admins',
+                    data: syntheticPolys,
+                    getPolygon: d => d.polygon,
+                    getFillColor: d => {
+                        const pred = predMap[d.id];
+                        if (!pred) return [50, 50, 50, 100];
+                        const value = pred.p50 || pred.yhat || 0;
+                        return colorForValue(value, min, max);
+                    },
+                    getLineColor: [80, 80, 80, 200],
+                    getLineWidth: 1000,
+                    lineWidthUnits: 'meters',
+                    pickable: true
+                });
+                layers.push(polyLayer);
+                
+                if (currentDeck) {
+                    currentDeck.setProps({layers});
+                } else {
+                    currentDeck = new deck.DeckGL({
+                        container: 'map',
+                        initialViewState: {
+                            longitude: 0,
+                            latitude: 0,
+                            zoom: 5,
+                            pitch: 0,
+                            bearing: 0
+                        },
+                        controller: true,
+                        layers,
+                        getTooltip: getTooltip
+                    });
+                }
+            }
+            
+            function getTooltip({object}) {
+                if (!object) return null;
+                
+                let id, name;
+                if (object.properties) {
+                    id = String(object.properties.admin_id || object.properties.shapeID || '');
+                    name = String(object.properties.name || object.properties.shapeName || '');
+                } else {
+                    id = object.id;
+                    name = id;
+                }
+                
+                const pred = predMap[id];
+                if (!pred) return `${name || id}\nNo prediction`;
+                
+                const p50 = (pred.p50 || pred.yhat || 0).toFixed(1);
+                const band = (pred.p10 != null && pred.p90 != null) 
+                    ? `\nP10-P90: ${pred.p10.toFixed(1)}-${pred.p90.toFixed(1)}` 
+                    : '';
+                
+                return `${name || id}\nMedian: ${p50}${band}`;
+            }
+        }
+        
+        // Load turf for bbox calculation
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/@turf/turf@6/turf.min.js';
+        document.head.appendChild(script);
+        
+        // Initialize controls
+        document.getElementById('run').onclick = async () => {
+            const region = document.getElementById('region').value;
+            const scenario = document.getElementById('scenario').value;
+            const months = parseInt(document.getElementById('months').value || '3');
+            const apiKey = document.getElementById('apikey').value;
+            const status = document.getElementById('status');
+            
+            status.textContent = 'Loading...';
+            
+            const result = await callScenario(region, scenario, months, apiKey);
+            
+            if (result.error) {
+                status.textContent = `Error: ${result.error}`;
+                return;
+            }
+            
+            render(result);
+            
+            // Update summary
+            const summary = document.getElementById('summary');
+            if (result.metadata) {
+                const period = result.metadata.period || result.metadata.base_period || '2020-12';
+                summary.innerHTML = `
+                    <strong>Region:</strong> ${region.replace(/_/g, ' ').toUpperCase()}<br/>
+                    <strong>Scenario:</strong> ${scenario}<br/>
+                    <strong>Period:</strong> ${period}<br/>
+                    <strong>Predictions:</strong> ${result.predictions.length} admin units<br/>
+                    <em>Map shows P50; hover for uncertainty bands</em>
+                `;
+            }
+            
+            status.textContent = '';
+        };
+        
+        // Download CSV
+        document.getElementById('dlCSV').onclick = async () => {
+            const region = document.getElementById('region').value;
+            const scenario = document.getElementById('scenario').value;
+            const months = parseInt(document.getElementById('months').value || '3');
+            const apiKey = document.getElementById('apikey').value;
+            
+            const headers = {'content-type': 'application/json'};
+            if (apiKey) headers['X-API-Key'] = apiKey;
+            
+            const r = await fetch(API_BASE + '/download_scenario_csv', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    region,
+                    scenario,
+                    months,
+                    period_start: '2020-12',
+                    periods: months
+                })
+            });
+            
+            if (!r.ok) {
+                alert('Download failed');
+                return;
+            }
+            
+            const text = await r.text();
+            const blob = new Blob([text], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `scenario_${scenario}_${region}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+        
+        // Model card
+        document.getElementById('showCard').onclick = async () => {
+            const card = document.getElementById('card');
+            if (card.style.display === 'none') {
+                if (!card.textContent) {
+                    try {
+                        const r = await fetch('model_card.md');
+                        if (r.ok) {
+                            const text = await r.text();
+                            card.innerHTML = `<pre style="white-space: pre-wrap;">${text}</pre>`;
+                        }
+                    } catch(e) {
+                        card.textContent = 'Model card not found';
+                    }
+                }
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        };
+        
+        // Auto-run on load
+        window.onload = () => {
+            document.getElementById('run').click();
+        };
+    </script>
+</body>
+</html>
